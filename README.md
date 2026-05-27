@@ -24,7 +24,7 @@ Before installing roles, ensure the system is properly configured with a static 
 * DNS: `127.0.0.1`
 
 
-> `[Insert Screenshot: IPv4 Properties window]`
+> image/set-ip-address.png
 
 
 3. **Rename Server:** In **Server Manager** > **Local Server** > Click **Computer name** > **Change**. Rename to `SVR-PDC` and restart.
