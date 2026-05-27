@@ -11,15 +11,50 @@
 ---
 
 ## Phase 1: Initial System Setup (Networking & Time)
-
 Before installing roles, ensure the system is properly configured with a static IP and the correct time zone.
+1. **NTP Server Configuration (Time Synchronization)
 
+**Why is this critical?** Active Directory relies heavily on the Kerberos protocol for authentication. If there is a time difference of more than **5 minutes** between the Domain Controller and other systems (like Proxmox or client machines), logons will be entirely rejected, and services will halt. The primary server (PDC) must be synced with accurate global time servers.
+
+### 🔹 Option A: Using the Graphical User Interface (GUI)
+
+1. Open **Server Manager**, then **Local Server**.
+2. Click on the time and date to open the **Date and Time** window.
+3. Go to the **Internet Time** tab and click **Change settings**.
+4. Check the box next to *Synchronize with an Internet time server*.
+5. In the Server field, type: `pool.ntp.org` and click **Update now**.
+6. Click **OK**.
+
+
+![description](images/NTP-Time-Synchronization.png)
+
+### 🔹 Option B: Using PowerShell (Automation)
+
+This method is highly recommended for Enterprise environments as it is more accurate and sets the server as a reliable time source:
+
+```powershell
+# Stop the Windows Time service temporarily
+net stop w32time
+
+# Configure the server to sync with global pool.ntp.org servers and set it as a reliable time source for the internal network
+w32tm /config /syncfromflags:manual /manualpeerlist:"0.pool.ntp.org 1.pool.ntp.org 2.pool.ntp.org" /reliable:yes /update
+
+# Restart the service and force synchronization immediately
+net start w32time
+w32tm /resync
+
+```
+
+---
+
+
+2. **Time Zone:** Right-click the clock in the taskbar > **Adjust date/time** > Set your correct time zone.
 * **Option A: Graphical User Interface (GUI)**
-1. **Time Zone:** Right-click the clock in the taskbar > **Adjust date/time** > Set your correct time zone.
+
 ![description](images/set-time-zone.png)
 
 
-2. **Network IP:** Open `ncpa.cpl` > Right-click **Ethernet** > **Properties** > **IPv4 Properties**. Enter:
+3. **Network IP:** Open `ncpa.cpl` > Right-click **Ethernet** > **Properties** > **IPv4 Properties**. Enter:
 * IP: `192.168.10.10` | Subnet: `255.255.255.0` | Gateway: `192.168.10.1`
 * DNS: `127.0.0.1`
 
@@ -27,7 +62,7 @@ Before installing roles, ensure the system is properly configured with a static 
 
 
 
-3. **Rename Server:** In **Server Manager** > **Local Server** > Click **Computer name** > **Change**. Rename to `SVR-PDC` and restart.
+4. **Rename Server:** In **Server Manager** > **Local Server** > Click **Computer name** > **Change**. Rename to `SVR-PDC` and restart.
 
 
 * **Option B: PowerShell (Automation)**
@@ -92,8 +127,32 @@ Install-ADDSForest -DomainName "Globe.com" -InstallDns -Force
 
 
 ---
+## Phase 4: Enable Active Directory Recycle Bin
 
-## Phase 4: Verification
+**Why is this critical?** By default, if you accidentally delete an OU, user, or group, restoring it is highly complex, and permissions may be lost. Enabling this feature allows you to restore any deleted object with a single click (retaining all its properties, group memberships, and passwords) for up to 180 days. *(Note: Once enabled, this feature cannot be disabled).*
+
+### 🔹 Option A: Using the Graphical User Interface (GUI)
+
+1. From **Server Manager**, click **Tools**, then select **Active Directory Administrative Center**.
+2. In the left pane, click on your local domain name (`Globe (local)`).
+3. On the far right under the Tasks menu, click on **Enable Recycle Bin**.
+4. A warning confirmation message will appear; click **OK**.
+
+
+![description](images/Enable-AD-Recycle-Bin.png)
+
+### 🔹 Option B: Using PowerShell (Automation)
+
+```powershell
+# Permanently enable the Recycle Bin feature for the Globe.com forest
+Enable-ADOptionalFeature -Identity 'Recycle Bin Feature' -Scope ForestOrConfigurationSet -Target 'Globe.com' -Confirm:$false
+
+```
+
+---
+
+
+## Phase 5: Verification
 
 Once the system restarts, verify the environment:
 
@@ -189,7 +248,28 @@ nslookup google.com
 
 
 ---
+## Phase 4: Register Server in Reverse DNS (PTR Record)
 
+**Why is this critical?** We previously created a Reverse Lookup Zone, but we must ensure the Domain Controller has actually registered itself within it. Advanced systems and cloud integrations often perform reverse lookups to verify the server's identity; without a PTR record, connections might be rejected or flagged as insecure.
+
+### 🔹 Option A: Using the Graphical User Interface (GUI)
+
+1. Open **Server Manager** -> **Tools** -> **DNS**.
+2. Expand your server name, then **Forward Lookup Zones**, and click on `Globe.com`.
+3. In the right pane, locate your server's name (e.g., `SVR-PDC` of type `Host (A)`).
+4. Double-click it, ensure the checkbox for **Update associated pointer (PTR) record** is ticked, and click **OK**.
+
+![description](images/PTR-Record-DNS.PNG)
+
+### 🔹 Option B: Using PowerShell (Automation)
+
+Run the following command to force the server to re-register its network records in DNS and update the Reverse Lookup Zone immediately:
+
+```powershell
+# Force the server to register its DNS records and update the PTR
+ipconfig /registerdns
+
+```
 
 
 This hierarchical structure for Organizational Units (OUs) is excellent. It securely isolates service accounts and adopts a scalable architecture that clearly separates the IT infrastructure (systems and services) from corporate departments (users and computers).
