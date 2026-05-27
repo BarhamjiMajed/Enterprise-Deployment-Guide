@@ -336,7 +336,7 @@ Get-ADOrganizationalUnit -Filter * -SearchBase "DC=GLOBE,DC=COM" | Select-Object
 
 ```
 
-
+![description](images/AD-UC-OUs.PNG)
 *(This will output a clean, organized list containing all Distinguished Names (DN), perfectly matching the tree structure you requested. The AD environment is now ready to host accounts and Group Policy Objects (GPOs).*
 
 
