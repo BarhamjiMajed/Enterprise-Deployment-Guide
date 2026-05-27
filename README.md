@@ -23,8 +23,8 @@ Before installing roles, ensure the system is properly configured with a static 
 * IP: `192.168.10.10` | Subnet: `255.255.255.0` | Gateway: `192.168.10.1`
 * DNS: `127.0.0.1`
 
+![description](images/set-ip-address.png)
 
-> image/set-ip-address.png
 
 
 3. **Rename Server:** In **Server Manager** > **Local Server** > Click **Computer name** > **Change**. Rename to `SVR-PDC` and restart.
