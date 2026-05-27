@@ -105,7 +105,7 @@ To fully configure the DNS server to serve internal devices, resolve local domai
 
 ---
 
-## Phase 5: Configuring DNS Forwarders (For Internet Access)
+## Phase 1: Configuring DNS Forwarders (For Internet Access)
 
 DNS Forwarders are public DNS servers (such as Google or Cloudflare) that your local Domain Controller queries when an internal client requests an external internet address that the local server does not recognize.
 
@@ -135,7 +135,7 @@ Set-DnsServerForwarder -IPAddress "8.8.8.8","1.1.1.1" -PassThru
 
 ---
 
-## Phase 6: Creating a Reverse Lookup Zone
+## Phase 2: Creating a Reverse Lookup Zone
 
 A Reverse Lookup Zone translates IP addresses back into hostnames (the exact opposite of a forward lookup). It is highly recommended in an Active Directory environment to ensure network stability and allow various services to function without errors.
 
@@ -164,7 +164,7 @@ Add-DnsServerPrimaryZone -NetworkId "192.168.10.0/24" -ReplicationScope "Domain"
 
 ---
 
-## Phase 7: Client Configuration and Final Verification
+## Phase 3: Client Configuration and Final Verification
 
 For client devices to successfully access the internet and resolve local domain resources, their network settings must be strictly pointed to your new DNS server.
 
@@ -204,7 +204,7 @@ Here is the professional engineering guide to building this exact structure, con
 
 ---
 
-## Phase 8: Creating the Root OUs
+## Phase 1: Creating the Root OUs
 
 In this phase, we will build the top-level units directly under the root domain `DC=GLOBE,DC=COM`.
 
@@ -230,7 +230,7 @@ New-ADOrganizationalUnit -Name "GLOBE" -Path "DC=GLOBE,DC=COM" -ProtectedFromAcc
 
 ---
 
-## Phase 9: Creating the Infrastructure Tier
+## Phase 2: Creating the Infrastructure Tier
 
 This phase branches out the systems and network services (Hypervisors, Nextcloud, Storage) and separates the users from the groups within each service.
 
@@ -276,7 +276,7 @@ New-ADOrganizationalUnit -Name "Storage_Users" -Path "OU=Storage,$infraPath" -Pr
 
 ---
 
-## Phase 10: Creating the Corporate Departments Tier (MD)
+## Phase 3: Creating the Corporate Departments Tier (MD)
 
 This phase establishes the administrative structure of the company, categorizing computers, groups, and users based on specific technical departments (IT, HR).
 
@@ -325,7 +325,7 @@ New-ADOrganizationalUnit -Name "MD_Users_IT" -Path "OU=MD_Users,$mdPath" -Protec
 
 ---
 
-## Phase 11: Final Verification
+## Phase 4: Final Verification
 
 To ensure that all Organizational Units have been created in the correct hierarchy without any path or spelling errors:
 
@@ -341,4 +341,170 @@ Get-ADOrganizationalUnit -Filter * -SearchBase "DC=GLOBE,DC=COM" | Select-Object
 *(This will output a clean, organized list containing all Distinguished Names (DN), perfectly matching the tree structure you requested. The AD environment is now ready to host accounts and Group Policy Objects (GPOs).*
 
 
+Here is the comprehensive guide for creating Users and Groups and distributing permissions within the established **Globe.com** OU hierarchy. This guide is designed around security best practices, such as isolating service accounts and utilizing Role-Based Access Control (RBAC) via specialized IT management groups.
 
+---
+
+# 👥 Identity & Access Provisioning Guide
+
+> **Security Best Practice:** All Service Accounts must be configured with highly complex passwords, have the "Password never expires" option enabled, and ideally be stripped of interactive logon rights to protect the system.
+
+---
+
+## Phase 1: Provisioning Service Accounts in `GLOBE_ServiceAccounts`
+
+In this isolated container, we will create dedicated accounts for each system service or integration (e.g., storage, hypervisors, and file sharing).
+
+### 🔹 Option A: Using the Graphical User Interface (GUI)
+
+1. Open **Active Directory Users and Computers**.
+2. Navigate to the `GLOBE_ServiceAccounts` OU, right-click it, and select **New** -> **User**.
+3. Fill in the details as follows:
+* **First Name / Full Name:** `svc_proxmox` (Repeat later for `svc_nextcloud` & `svc_storage`).
+* **User logon name:** `svc_proxmox`.
+
+
+4. Click **Next** and enter a complex password.
+5. **Uncheck** *User must change password at next logon*.
+6. **Check** *Password never expires*.
+7. Click **Next**, then **Finish**.
+
+![description](images/svc_proxmox-user-add.PNG)
+![description](images/Uncheck-Change-Password.PNG)
+
+
+### 🔹 Option B: Using PowerShell (Automation)
+
+Run the following script block to create all three service accounts at once using a secure password prompt:
+
+```powershell
+# Prompt for a unified secure password for service accounts
+$SecurePassword = Read-Host -AsSecureString "Enter a secure password for service accounts"
+$TargetOU = "OU=GLOBE_ServiceAccounts,DC=GLOBE,DC=COM"
+
+# Create Service Accounts
+New-ADUser -Name "svc_proxmox" -SamAccountName "svc_proxmox" -UserPrincipalName "svc_proxmox@globe.com" -Path $TargetOU -AccountPassword $SecurePassword -Enabled $true -PasswordNeverExpires $true
+New-ADUser -Name "svc_nextcloud" -SamAccountName "svc_nextcloud" -UserPrincipalName "svc_nextcloud@globe.com" -Path $TargetOU -AccountPassword $SecurePassword -Enabled $true -PasswordNeverExpires $true
+New-ADUser -Name "svc_storage" -SamAccountName "svc_storage" -UserPrincipalName "svc_storage@globe.com" -Path $TargetOU -AccountPassword $SecurePassword -Enabled $true -PasswordNeverExpires $true
+
+```
+
+---
+
+## Phase 2: Provisioning Infrastructure Tier Users & Groups
+
+For every service in the Infrastructure tier, we will create two control groups (`_admins` for full privileges, and `_access` for standard access) and one admin user who is automatically added to their respective `_admins` group.
+
+### 🔹 Option A: Using the Graphical User Interface (GUI)
+
+1. Navigate to `OU=Infrastructure` and open a service folder (e.g., `Hypervisors`).
+2. Go into the `HV_Groups` OU, right-click, and select **New** -> **Group**.
+3. Create a group named `HV_admins` and another named `HV_access` (Set Group scope to *Global* and Group type to *Security*).
+4. Go to the `HV_Users` OU and create a user named `HV_admin`.
+5. After creating the user, right-click `HV_admin`, select **Properties** -> **Member Of** tab -> click **Add**, type `HV_admins`, and click **OK**.
+6. Repeat these exact steps for the `Nextcloud` and `Storage` OUs.
+
+![description](images/Add-New-Group.PNG)
+
+### 🔹 Option B: Using PowerShell (Automation)
+
+Run this script to automate the creation of infrastructure groups, users, and their bindings instantly:
+
+```powershell
+$Pass = Read-Host -AsSecureString "Enter admin user password"
+$InfraRoot = "OU=Infrastructure,OU=GLOBE,DC=GLOBE,DC=COM"
+
+# --- 1. Hypervisors Setup ---
+New-ADGroup -Name "HV_admins" -GroupScope Global -GroupCategory Security -Path "OU=HV_Groups,OU=Hypervisors,$InfraRoot"
+New-ADGroup -Name "HV_access" -GroupScope Global -GroupCategory Security -Path "OU=HV_Groups,OU=Hypervisors,$InfraRoot"
+New-ADUser -Name "HV_admin" -SamAccountName "HV_admin" -UserPrincipalName "HV_admin@globe.com" -Path "OU=HV_Users,OU=Hypervisors,$InfraRoot" -AccountPassword $Pass -Enabled $true
+Add-ADGroupMember -Identity "HV_admins" -Members "HV_admin"
+
+# --- 2. Nextcloud Setup ---
+New-ADGroup -Name "NC_admins" -GroupScope Global -GroupCategory Security -Path "OU=NC_Groups,OU=Nextcloud,$InfraRoot"
+New-ADGroup -Name "NC_access" -GroupScope Global -GroupCategory Security -Path "OU=NC_Groups,OU=Nextcloud,$InfraRoot"
+New-ADUser -Name "NC_admin" -SamAccountName "NC_admin" -UserPrincipalName "NC_admin@globe.com" -Path "OU=NC_Users,OU=Nextcloud,$InfraRoot" -AccountPassword $Pass -Enabled $true
+Add-ADGroupMember -Identity "NC_admins" -Members "NC_admin"
+
+# --- 3. Storage Setup ---
+New-ADGroup -Name "Storage_admins" -GroupScope Global -GroupCategory Security -Path "OU=Storage_Groups,OU=Storage,$InfraRoot"
+New-ADGroup -Name "Storage_access" -GroupScope Global -GroupCategory Security -Path "OU=Storage_Groups,OU=Storage,$InfraRoot"
+New-ADUser -Name "Storage_admin" -SamAccountName "Storage_admin" -UserPrincipalName "Storage_admin@globe.com" -Path "OU=Storage_Users,OU=Storage,$InfraRoot" -AccountPassword $Pass -Enabled $true
+Add-ADGroupMember -Identity "Storage_admins" -Members "Storage_admin"
+
+```
+
+---
+
+## Phase 3: Provisioning Corporate Departments (MD Tier)
+
+Here, we will create general departmental groups (HR, IT), followed by specialized IT management groups (Storage, Proxmox, Nextcloud, AD) to distribute administrative tasks. Finally, we will create users and assign them to their respective groups.
+
+### 🔹 Option A: Using the Graphical User Interface (GUI)
+
+1. Navigate to `OU=MD` and then into each department's groups folder:
+* Inside `OU=MD_Groups_HR`: Create the security group `MD_Group_HR`.
+* Inside `OU=MD_Groups_IT`: Create the security group `MD_Group_IT`.
+
+
+2. **Create IT Specialized Groups (Inside `OU=MD_Groups_IT`):**
+Right-click and create the following groups:
+* `IT_Mgr_Storage` (For storage management)
+* `IT_Mgr_Proxmox` (For virtualization management)
+* `IT_Mgr_Nextcloud` (For private cloud management)
+* `IT_Mgr_ActiveDirectory` (For Domain Controller management)
+
+
+3. Navigate to the Users folders to provision employees (e.g., create `it_user1` inside `OU=MD_Users_IT`, then add them to both `MD_Group_IT` and their specialized management group like `IT_Mgr_Proxmox`).
+
+
+![description](images/Add-Group-IT_Mgr_ActiveDirectory.PNG)
+
+### 🔹 Option B: Using PowerShell (Automation)
+
+Run this script to instantly build the base and specialized departmental groups:
+
+```powershell
+$MD_Root = "OU=MD,OU=GLOBE,DC=GLOBE,DC=COM"
+
+# 1. Create general department groups
+New-ADGroup -Name "MD_Group_HR" -GroupScope Global -GroupCategory Security -Path "OU=MD_Groups_HR,OU=MD_Groups,$MD_Root"
+New-ADGroup -Name "MD_Group_IT" -GroupScope Global -GroupCategory Security -Path "OU=MD_Groups_IT,OU=MD_Groups,$MD_Root"
+
+# 2. Create specialized IT management groups (Easily expandable later)
+$IT_Groups_Path = "OU=MD_Groups_IT,OU=MD_Groups,$MD_Root"
+
+New-ADGroup -Name "IT_Mgr_Storage" -GroupScope Global -GroupCategory Security -Path $IT_Groups_Path
+New-ADGroup -Name "IT_Mgr_Proxmox" -GroupScope Global -GroupCategory Security -Path $IT_Groups_Path
+New-ADGroup -Name "IT_Mgr_Nextcloud" -GroupScope Global -GroupCategory Security -Path $IT_Groups_Path
+New-ADGroup -Name "IT_Mgr_ActiveDirectory" -GroupScope Global -GroupCategory Security -Path $IT_Groups_Path
+
+# 3. Example: Create an IT user and bind them to the general and a specialized group
+$UserPass = Read-Host -AsSecureString "Enter password for IT test user"
+New-ADUser -Name "it_admin_pro" -SamAccountName "it_admin_pro" -UserPrincipalName "it_admin_pro@globe.com" -Path "OU=MD_Users_IT,OU=MD_Users,$MD_Root" -AccountPassword $UserPass -Enabled $true
+
+# Bind the IT user to their groups
+Add-ADGroupMember -Identity "MD_Group_IT" -Members "it_admin_pro"
+Add-ADGroupMember -Identity "IT_Mgr_Proxmox" -Members "it_admin_pro"
+
+```
+
+---
+
+## Phase 4: Verification
+
+To programmatically verify that all groups, users, and their bindings have been configured correctly without errors:
+
+* **Verify specialized group membership (RBAC check):**
+Run the following command to see the members of an IT management group to ensure successful binding:
+```powershell
+Get-ADGroupMember -Identity "IT_Mgr_Proxmox" | Select-Object Name, SamAccountName | Format-Table
+
+```
+
+
+* **Verify isolated Service Accounts:**
+```powershell
+Get-ADUser -Filter * -SearchBase "OU=GLOBE_ServiceAccounts,DC=GLOBE,DC=COM" | Select-Object Name, UserPrincipalName
+
+```
