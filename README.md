@@ -16,7 +16,7 @@ Before installing roles, ensure the system is properly configured with a static 
 
 * **Option A: Graphical User Interface (GUI)**
 1. **Time Zone:** Right-click the clock in the taskbar > **Adjust date/time** > Set your correct time zone.
-> `[Insert Screenshot: Date & Time settings window]`
+![description](images/set-time-zone.png)
 
 
 2. **Network IP:** Open `ncpa.cpl` > Right-click **Ethernet** > **Properties** > **IPv4 Properties**. Enter:
@@ -56,7 +56,7 @@ Rename-Computer -NewName "SVR-PDC" -Restart
 3. Click **Add Features** in the pop-up, then proceed to finish the installation.
 
 
-> `[Insert Screenshot: Role Selection window]`
+![description](images/Add-ADDS-Role.png)
 
 
 * **Option B: PowerShell**
@@ -79,7 +79,7 @@ Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools
 5. Once the "Prerequisites Check" passes, click **Install**.
 
 
-> `[Insert Screenshot:![alt text](blob:https://markdownviewer.pages.dev/81f0b455-20ee-48a7-bc51-1e29185b0d13) Domain Controller Promotion Wizard]`
+![description](images/Review-ADDS-Configiuration.png)
 
 
 * **Option B: PowerShell**
