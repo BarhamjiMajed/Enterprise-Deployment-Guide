@@ -186,3 +186,158 @@ nslookup google.com
 ```
 
 *If both commands return the correct IP addresses, your DNS infrastructure is professionally deployed and fully operational.*
+
+
+---
+
+
+
+This hierarchical structure for Organizational Units (OUs) is excellent. It securely isolates service accounts and adopts a scalable architecture that clearly separates the IT infrastructure (systems and services) from corporate departments (users and computers).
+
+Here is the professional engineering guide to building this exact structure, continuing with our standardized format (integrating both GUI and PowerShell options for each phase):
+
+---
+
+# 📂 Guide: Building the Organizational Unit (OU) Hierarchy
+
+> **Professional Note:** When creating these OUs, we will enable the **Protect container from accidental deletion** feature. This is a critical best practice to safeguard the vital Active Directory environment against human error.
+
+---
+
+## Phase 8: Creating the Root OUs
+
+In this phase, we will build the top-level units directly under the root domain `DC=GLOBE,DC=COM`.
+
+### 🔹 Option A: Using the Graphical User Interface (GUI)
+
+1. Open **Server Manager**, click on **Tools**, and select **Active Directory Users and Computers**.
+2. Right-click on your domain name `Globe.com`, select **New**, then click **Organizational Unit**.
+3. In the Name field, type: `GLOBE_ServiceAccounts`. Ensure that the *Protect container from accidental deletion* checkbox is selected, then click **OK**.
+4. Repeat the previous steps to create the second root OU named: `GLOBE`.
+
+![description](images/GLOBE_ServiceAccounts-OUs.PNG)
+
+### 🔹 Option B: Using PowerShell (Automation)
+
+Open PowerShell as Administrator and run the following commands:
+
+```powershell
+# Create root OUs directly under the domain root
+New-ADOrganizationalUnit -Name "GLOBE_ServiceAccounts" -Path "DC=GLOBE,DC=COM" -ProtectedFromAccidentalDeletion $true
+New-ADOrganizationalUnit -Name "GLOBE" -Path "DC=GLOBE,DC=COM" -ProtectedFromAccidentalDeletion $true
+
+```
+
+---
+
+## Phase 9: Creating the Infrastructure Tier
+
+This phase branches out the systems and network services (Hypervisors, Nextcloud, Storage) and separates the users from the groups within each service.
+
+### 🔹 Option A: Using the Graphical User Interface (GUI)
+
+1. In **Active Directory Users and Computers**, expand the domain and right-click on the previously created `GLOBE` OU.
+2. Select **New** -> **Organizational Unit** and name it `Infrastructure`.
+3. Next, right-click on the new `Infrastructure` OU and create 3 sub-OUs inside it one by one: `Hypervisors`, `Nextcloud`, and `Storage`.
+4. Enter each of these three OUs, right-click inside, and create the respective User and Group sub-OUs (e.g., inside the Nextcloud OU, create `NC_Users` and `NC_Groups`).
+
+![description](images/Infrastructure-OUs.PNG)
+
+### 🔹 Option B: Using PowerShell (Automation)
+
+Run this script block to build the entire Infrastructure tier instantly:
+
+```powershell
+# 1. Create the main Infrastructure container inside GLOBE
+New-ADOrganizationalUnit -Name "Infrastructure" -Path "OU=GLOBE,DC=GLOBE,DC=COM" -ProtectedFromAccidentalDeletion $true
+
+# Define the parent path variable to simplify the script
+$infraPath = "OU=Infrastructure,OU=GLOBE,DC=GLOBE,DC=COM"
+
+# 2. Create the System sub-OUs
+New-ADOrganizationalUnit -Name "Hypervisors" -Path $infraPath -ProtectedFromAccidentalDeletion $true
+New-ADOrganizationalUnit -Name "Nextcloud" -Path $infraPath -ProtectedFromAccidentalDeletion $true
+New-ADOrganizationalUnit -Name "Storage" -Path $infraPath -ProtectedFromAccidentalDeletion $true
+
+# 3. Create Users and Groups sub-OUs for each system
+# Hypervisors
+New-ADOrganizationalUnit -Name "HV_Groups" -Path "OU=Hypervisors,$infraPath" -ProtectedFromAccidentalDeletion $true
+New-ADOrganizationalUnit -Name "HV_Users" -Path "OU=Hypervisors,$infraPath" -ProtectedFromAccidentalDeletion $true
+
+# Nextcloud
+New-ADOrganizationalUnit -Name "NC_Groups" -Path "OU=Nextcloud,$infraPath" -ProtectedFromAccidentalDeletion $true
+New-ADOrganizationalUnit -Name "NC_Users" -Path "OU=Nextcloud,$infraPath" -ProtectedFromAccidentalDeletion $true
+
+# Storage
+New-ADOrganizationalUnit -Name "Storage_Groups" -Path "OU=Storage,$infraPath" -ProtectedFromAccidentalDeletion $true
+New-ADOrganizationalUnit -Name "Storage_Users" -Path "OU=Storage,$infraPath" -ProtectedFromAccidentalDeletion $true
+
+```
+
+---
+
+## Phase 10: Creating the Corporate Departments Tier (MD)
+
+This phase establishes the administrative structure of the company, categorizing computers, groups, and users based on specific technical departments (IT, HR).
+
+### 🔹 Option A: Using the Graphical User Interface (GUI)
+
+1. Right-click on the main `GLOBE` OU, select **New** -> **Organizational Unit**, and name it `MD`.
+2. Inside the `MD` OU, create 3 primary categorization OUs: `MD_Computers`, `MD_Groups`, and `MD_Users`.
+3. Navigate into each one to create the department-specific sub-OUs:
+* Inside `MD_Computers`: Create `MD_Computers_IT`.
+* Inside `MD_Groups`: Create `MD_Groups_HR` and `MD_Groups_IT`.
+* Inside `MD_Users`: Create `MD_Users_HR` and `MD_Users_IT`.
+
+
+
+![description](images/MD-OUs.PNG)
+
+### 🔹 Option B: Using PowerShell (Automation)
+
+Run the following commands to instantly build the departmental and administrative structure:
+
+```powershell
+# 1. Create the main MD container for departments inside GLOBE
+New-ADOrganizationalUnit -Name "MD" -Path "OU=GLOBE,DC=GLOBE,DC=COM" -ProtectedFromAccidentalDeletion $true
+
+# Define the parent path variable
+$mdPath = "OU=MD,OU=GLOBE,DC=GLOBE,DC=COM"
+
+# 2. Create the core object categorization OUs (Computers, Groups, Users)
+New-ADOrganizationalUnit -Name "MD_Computers" -Path $mdPath -ProtectedFromAccidentalDeletion $true
+New-ADOrganizationalUnit -Name "MD_Groups" -Path $mdPath -ProtectedFromAccidentalDeletion $true
+New-ADOrganizationalUnit -Name "MD_Users" -Path $mdPath -ProtectedFromAccidentalDeletion $true
+
+# 3. Create the department-specific branches (IT / HR)
+# Computers Sub-OUs
+New-ADOrganizationalUnit -Name "MD_Computers_IT" -Path "OU=MD_Computers,$mdPath" -ProtectedFromAccidentalDeletion $true
+
+# Groups Sub-OUs
+New-ADOrganizationalUnit -Name "MD_Groups_HR" -Path "OU=MD_Groups,$mdPath" -ProtectedFromAccidentalDeletion $true
+New-ADOrganizationalUnit -Name "MD_Groups_IT" -Path "OU=MD_Groups,$mdPath" -ProtectedFromAccidentalDeletion $true
+
+# Users Sub-OUs
+New-ADOrganizationalUnit -Name "MD_Users_HR" -Path "OU=MD_Users,$mdPath" -ProtectedFromAccidentalDeletion $true
+New-ADOrganizationalUnit -Name "MD_Users_IT" -Path "OU=MD_Users,$mdPath" -ProtectedFromAccidentalDeletion $true
+
+```
+
+---
+
+## Phase 11: Final Verification
+
+To ensure that all Organizational Units have been created in the correct hierarchy without any path or spelling errors:
+
+* **Verify programmatically via PowerShell:**
+Run the following command to list the entire OU tree under the main domain, neatly formatted by Name and Distinguished Path:
+```powershell
+Get-ADOrganizationalUnit -Filter * -SearchBase "DC=GLOBE,DC=COM" | Select-Object Name, DistinguishedName | Format-Table -AutoSize
+
+```
+
+
+*(This will output a clean, organized list containing all Distinguished Names (DN), perfectly matching the tree structure you requested. The AD environment is now ready to host accounts and Group Policy Objects (GPOs).*
+
+
+
