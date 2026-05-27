@@ -26,7 +26,7 @@ Before installing roles, ensure the system is properly configured with a static 
 6. Click **OK**.
 
 
-![description](images/NTP-Time-Synchronization.png)
+![description](images/NTP-Time-Synchronization.PNG)
 
 ### 🔹 Option B: Using PowerShell (Automation)
 
@@ -139,7 +139,7 @@ Install-ADDSForest -DomainName "Globe.com" -InstallDns -Force
 4. A warning confirmation message will appear; click **OK**.
 
 
-![description](images/Enable-AD-Recycle-Bin.png)
+![description](images/Enable-AD-Recycle-Bin.PNG)
 
 ### 🔹 Option B: Using PowerShell (Automation)
 
