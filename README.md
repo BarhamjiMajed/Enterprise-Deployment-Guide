@@ -588,3 +588,171 @@ Get-ADGroupMember -Identity "IT_Mgr_Proxmox" | Select-Object Name, SamAccountNam
 Get-ADUser -Filter * -SearchBase "OU=GLOBE_ServiceAccounts,DC=GLOBE,DC=COM" | Select-Object Name, UserPrincipalName
 
 ```
+
+
+
+
+#  Storage Infrastructure Deployment (TrueNAS SCALE)
+
+## 🔬 Pre-Deployment Prerequisites & Proactive Study
+
+To avoid any future errors (such as domain join failure, AD groups not appearing, or file synchronization issues later), you must thoroughly verify the following before starting the actual deployment:
+
+1. **Time Synchronization (NTP):**
+   - **Strategic Risk:** The Kerberos authentication protocol in Active Directory strictly relies on time synchronization. If the time difference between the TrueNAS server and the Domain Controller exceeds 5 minutes, the connection will fail immediately, showing vague authentication errors.
+   - **Proactive Preparation:** TrueNAS SCALE must be configured to get its time (NTP) directly and exclusively from the primary DC (`192.168.10.10`).
+
+2. **DNS Resolution Accuracy:**
+   - **Strategic Risk:** If the storage server cannot resolve the domain name `Globe.com` and access SRV Records, it will not recognize the domain.
+   - **Proactive Preparation:** The DC server (`192.168.10.10`) must be set as the first and only DNS server in the TrueNAS network settings.
+
+3. **Disk Architecture and ZFS Rule:**
+   - **Strategic Risk:** The ZFS file system in TrueNAS relies on bare-metal access to the disks. Using Hardware RAID controllers masks the true state of the disks, which can lead to data corruption or Pool failure in the future.
+   - **Proactive Preparation:** Ensure the disk controller is set to Passthrough (IT Mode / HBA) before building the `main-pool`.
+
+4. **Active Directory Preparation (AD Prep):**
+   - The service account `svc_storage` must be verified in advance with appropriate permissions.
+   - Security groups such as `IT_Mgr_Storage` and `Storage_admins` must exist within the designated OUs before enabling synchronization on the storage server to ensure they are pulled correctly and immediately.
+
+---
+
+## 2.1 Active Directory Deployment Verification (Execute on DC: SVR-PDC)
+
+Before proceeding with the TrueNAS domain join, run the following verification script in PowerShell to ensure that the required groups, service accounts, and DNS records have been properly created and configured by the AD administration team.
+
+### Step-by-Step Verification (Using PowerShell):
+
+1. **Verify Storage Management Security Groups & Target OUs:**
+   Run the following commands to confirm the groups exist and reside in their exact designated organizational units (OUs):
+   ```powershell
+   # Verify IT Managers Storage Group
+   Get-ADGroup -Identity "IT_Mgr_Storage" -Properties DistinguishedName, GroupScope, GroupCategory | 
+   Select-Object Name, GroupScope, GroupCategory, DistinguishedName
+
+   # Verify Storage Administrators Group
+   Get-ADGroup -Identity "Storage_admins" -Properties DistinguishedName, GroupScope, GroupCategory | 
+   Select-Object Name, GroupScope, GroupCategory, DistinguishedName
+  
+
+
+2. **Verify Storage Service Account Status & Password Policies:**
+Run this command to check if the `svc_storage` service account is enabled, its UPN is correct, and the password is set to never expire:
+
+```powershell
+Get-ADUser -Identity "svc_storage" -Properties Enabled, PasswordNeverExpires, UserPrincipalName, DistinguishedName | 
+Select-Object Name, SamAccountName, UserPrincipalName, Enabled, PasswordNeverExpires, DistinguishedName
+
+```
+
+
+3. **Verify DNS Forward and Reverse Resolution for TrueNAS:**
+Validate that the DNS infrastructure can successfully resolve the storage server's hostname and that a Pointer (PTR) record exists for reverse mapping:
+```powershell
+# Check Forward Lookup (A Record)
+Resolve-DnsName -Name "truenas.Globe.com" -Type A
+
+# Check Reverse Lookup (PTR Record)
+Resolve-DnsName -Name "192.168.10.20" -Type PTR
+
+```
+
+
+
+---
+
+## 2.2 TrueNAS SCALE Initial Setup & Network Configuration
+
+1. Install the TrueNAS SCALE system on the dedicated hardware or virtual environment.
+2. Open the graphical web interface via a browser by navigating to: `https://192.168.10.20`.
+3. Go to the side menu: **Network** then **Global Configuration** and configure the following:
+* **Hostname:** `truenas`
+* **Domain:** `Globe.com`
+* **Nameserver 1:** `192.168.10.10` *(Mandatory: The Domain Controller)*
+* **Default Gateway:** `192.168.10.1`
+
+
+4. Navigate to **System Settings** -> **General** -> **NTP Servers**:
+* Delete all default public NTP servers.
+* Add a new NTP server pointing directly to your DC: `192.168.10.10`.
+* *Confirmation Step:* Force a time sync and ensure it matches the Domain Controller exactly down to the seconds.
+
+
+
+---
+
+## 2.3 Joining TrueNAS to Active Directory (Globe.com)
+
+1. From the TrueNAS interface, navigate to **Credentials** then **Directory Services**.
+2. Click on **Configure Active Directory**.
+3. Fill in the specified details accurately:
+* **Domain Name:** `Globe.com`
+* **Domain Account Name:** `svc_storage`
+* **Domain Account Password:** *(The password verified and set for the service account)*
+
+
+4. Check the **Enable** option.
+5. Expand **Advanced Options** and verify the following are enabled:
+* **Allow DNS updates:** Checked.
+* **NetBIOS Name:** `TRUENAS`
+
+
+6. Click **Save**.
+7. *Verify the Join:* Wait a few seconds, then refresh the **Directory Services** page. The AD status should appear green and show `HEALTHY`.
+8. Open the TrueNAS Shell and run the following commands to ensure users and groups are successfully pulled:
+```bash
+wbinfo -u
+wbinfo -g
+
+```
+
+
+
+---
+
+## 2.4 Granting Domain Groups Admin Permissions
+
+To allow members of the `IT_Mgr_Storage` and `Storage_admins` groups to fully manage the storage server as administrators:
+
+1. Navigate to **Credentials** then **Local Groups**.
+2. Find the built-in system group named `builtin_administrators` and click **Edit**.
+3. In the **Members** field, search for and add the following domain groups:
+* `GLOBE\IT_Mgr_Storage`
+* `GLOBE\Storage_admins`
+
+
+4. Click **Save**.
+*(By doing this, members of these groups have full capability to log in, manage the system, and control storage permissions via their domain accounts).*
+
+---
+
+## 2.5 Creating the Storage Pool and Dataset
+
+1. Navigate to the **Storage** section in the TrueNAS interface.
+2. Click on **Create Pool**:
+* **Name:** `main-pool`
+* Select the available disks and choose the appropriate layout (like Mirror or RAIDZ1 based on your available disks).
+* Click **Create**.
+
+
+3. Once the pool is successfully created, locate `main-pool` in the dashboard.
+4. Click the three dots next to the pool and select **Add Dataset**:
+* **Name:** `Nextcloud-data`
+* **Dataset Preset:** Choose `Generic` or `SMB` (depending on the protocol you will use to share files with Nextcloud later). In AD environments, using settings compatible with advanced permissions is recommended.
+* **Sync:** Standard
+* Click **Save**.
+
+
+5. Configure Access and Security Permissions on `Nextcloud-data`:
+* Click the three dots next to the new Dataset, select **View Permissions**, then **Edit**.
+* Change the **Owner Group** to the domain group: `GLOBE\Storage_admins`.
+* Ensure the Nextcloud service account (which will be created in upcoming phases) is granted Full Control or Modify permissions on this folder to enable it to store and sync files smoothly.
+
+
+
+---
+
+### 💡 Important Notes:
+
+* **Join Account Privileges (`svc_storage`):** In real enterprise environments, it is a best security practice not to make this account a "Domain Admin". Instead, create it as a standard user and grant it only the "Join a computer to the domain" right via Delegation of Control on the designated Servers OU.
+* **Connecting Storage to Nextcloud:** Depending on your deployment architecture within Proxmox, this Dataset can be shared via **NFS** or **SMB** protocols, or directly attached as a Mount Point if the Nextcloud application resides in the same virtual environment and has direct network access to TrueNAS.
+
